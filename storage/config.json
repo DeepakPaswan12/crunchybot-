@@ -1,0 +1,10 @@
+{
+  "bot_token": "",
+  "owner_id": 7495776469,
+  "default_threads": 4,
+  "default_preflight_workers": 50,
+  "default_preflight_timeout": 10,
+  "syslog_chat_id": 0,
+  "max_accounts_per_job": 100000,
+  "job_retention_hours": 72
+}

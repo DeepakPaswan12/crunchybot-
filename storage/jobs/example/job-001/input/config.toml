@@ -1,0 +1,11 @@
+[dev]
+Debug = false
+Threads = 8
+Proxyless = false
+SkipPreflight = false
+PreflightWorkers = 50
+PreflightTimeout = 10
+
+[auth]
+BasicAuth = "Basic ZXZ4YzVybGN1bnd4cm91YWpmeHI6NkJGWGM1SUk3UWx2Z3NFbzdiVjBuWUNfN1VRLXVlSVM="
+AppVersion = "3.70.0 (22358)"
