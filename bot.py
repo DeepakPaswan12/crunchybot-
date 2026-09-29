@@ -8,6 +8,7 @@ import time
 import uuid
 from pathlib import Path
 
+from aiohttp import web
 from telegram import (
     Update,
     InlineKeyboardButton,
@@ -38,17 +39,18 @@ STORAGE.mkdir(exist_ok=True)
 JOBS_DIR.mkdir(exist_ok=True)
 
 # ── config load ──────────────────────────────────────────────────────────
-if not CONFIG_FILE.exists():
-    raise SystemExit(f"Missing {CONFIG_FILE}. Copy storage/config.json template.")
+if CONFIG_FILE.exists():
+    BOT_CFG = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+else:
+    BOT_CFG = {}
 
-BOT_CFG = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
-BOT_TOKEN = BOT_CFG["bot_token"]
-OWNER_ID = int(BOT_CFG["owner_id"])
+BOT_TOKEN = os.environ.get("BOT_TOKEN") or BOT_CFG.get("bot_token")
+OWNER_ID = int(os.environ.get("OWNER_ID") or BOT_CFG.get("owner_id") or 0)
 MAX_ACCOUNTS = int(BOT_CFG.get("max_accounts_per_job", 100000))
 RETENTION_H = int(BOT_CFG.get("job_retention_hours", 72))
 
 if not BOT_TOKEN or BOT_TOKEN == "PUT_YOUR_BOT_TOKEN_HERE":
-    raise SystemExit("Set bot_token in storage/config.json")
+    raise SystemExit("Set BOT_TOKEN env var or storage/config.json")
 
 # ── whitelist ────────────────────────────────────────────────────────────
 def _load_whitelist() -> dict:
@@ -102,6 +104,65 @@ def remove_from_whitelist(user_id: int) -> bool:
 app_ref: dict = {"app": None, "loop": None}
 
 SYSLOG_CHAT_ID = BOT_CFG.get("syslog_chat_id") or OWNER_ID
+
+
+async def _webhook_handler(request):
+    """Telegram webhook receiver."""
+    try:
+        data = await request.json()
+        app = app_ref["app"]
+        if app is None:
+            return web.Response(status=503)
+        update = Update.de_json(data, app.bot)
+        await app.update_queue.put(update)
+        return web.Response(text="ok")
+    except Exception as e:
+        logging.exception(f"webhook error: {e}")
+        return web.Response(status=500)
+
+
+async def _health(request):
+    return web.Response(text="alive")
+
+
+async def _run_webhook(app: Application):
+    port = int(os.environ.get("PORT", 10000))
+    external_url = os.environ.get("RENDER_EXTERNAL_URL")
+    webhook_path = "/webhook"
+
+    app_ref["loop"] = asyncio.get_running_loop()
+    await app.initialize()
+    if app.post_init:
+        await app.post_init(app)
+    await app.start()
+
+    if external_url:
+        full = f"{external_url}{webhook_path}"
+        await app.bot.set_webhook(full, drop_pending_updates=True)
+        logging.info(f"webhook set: {full}")
+
+        server = web.Application()
+        server.router.add_post(webhook_path, _webhook_handler)
+        server.router.add_get("/health", _health)
+
+        runner = web.AppRunner(server)
+        await runner.setup()
+        site = web.TCPSite(runner, "0.0.0.0", port)
+        await site.start()
+        logging.info(f"http listening on {port}")
+    else:
+        await app.updater.start_polling(drop_pending_updates=True)
+
+    try:
+        await asyncio.Event().wait()
+    finally:
+        if external_url:
+            await app.bot.delete_webhook()
+            await runner.cleanup()
+        else:
+            await app.updater.stop()
+        await app.stop()
+        await app.shutdown()
 
 
 async def _syslog(app, text: str):
@@ -817,10 +878,9 @@ def main():
 
     app.post_init = _start_bg
     app_ref["app"] = app
-    app_ref["loop"] = asyncio.get_event_loop()
 
     print(f"bot running. owner={OWNER_ID}. whitelist size={len(WHITELIST)}")
-    app.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
+    asyncio.run(_run_webhook(app))
 
 
 if __name__ == "__main__":

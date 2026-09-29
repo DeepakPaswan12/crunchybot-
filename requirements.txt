@@ -2,3 +2,4 @@ tls_client
 toml
 python-telegram-bot==21.6
 psutil
+aiohttp
