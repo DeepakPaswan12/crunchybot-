@@ -41,7 +41,7 @@ Whitelist-gated. Per-user jobs. Live progress. Proxy pool with preflight. Runs h
 
 - **Python 3.9 – 3.12** (3.11 recommended)
 - A Telegram bot token from [@BotFather](https://t.me/BotFather)
-- Your numeric Telegram user ID (message [@userinfobot](https://t.me/userinfobot) to find it)
+- Your numeric Telegram user ID (message [@userinfobot](https://t.me/CyberiousCheckerBot) to find it)
 - Optional: a list of HTTP proxies
 
 > **Windows note:** `tls_client` ships prebuilt wheels for 3.9–3.12. On 3.13 it tries to build from source and needs Visual Studio Build Tools. Use 3.11 or 3.12 to avoid this.
